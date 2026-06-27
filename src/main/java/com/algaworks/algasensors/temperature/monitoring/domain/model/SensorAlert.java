@@ -16,7 +16,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class SensorAlert {
     @Id
-    @AttributeOverride(name = "value", column = @Column(name = "id", columnDefinition = "bigint"))
+    @AttributeOverride(name = "value",
+            column = @Column(name = "id", columnDefinition = "bigint"))
     private SensorId id;
     private Double maxTemperature;
     private Double minTemperature;
