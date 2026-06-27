@@ -104,6 +104,22 @@ class SensorMonitoringControllerIT {
         }
 
         @Test
+        @DisplayName("should return 422 when enabling a monitoring that is already enabled")
+        void shouldReturnUnprocessableWhenAlreadyEnabled() {
+            SensorMonitoring monitoring = persistMonitoring(TSID.fast(), true, null, null);
+
+            client.put().uri(ENABLE_PATH, idOf(monitoring))
+                    .exchange()
+                    .expectStatus().isEqualTo(422);
+
+            client.get().uri(DETAIL_PATH, idOf(monitoring))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.enabled").isEqualTo(true);
+        }
+
+        @Test
         @DisplayName("should create and enable the monitoring when it does not exist yet")
         void shouldCreateAndEnableWhenAbsent() {
             TSID sensorId = TSID.fast();
