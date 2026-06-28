@@ -19,13 +19,14 @@ import static com.algaworks.algasensors.temperature.monitoring.infrastructure.ra
 @RequiredArgsConstructor
 public class RabbitMQListener {
 
-    @RabbitListener(queues = QUEUE)
+    @RabbitListener(queues = QUEUE, concurrency = "2-3")
     @SneakyThrows
     public void handle(@Payload TemperatureLogData temperatureLogData, @Headers Map<String, String> headers) {
         TSID sensorId = temperatureLogData.getSensorId();
         Double temperature = temperatureLogData.getValue();
         log.info("Temperature updated: SensorId {} Temp {}", sensorId,  temperature);
         log.info("Headers: {}", headers);
+        Thread.sleep(5000);
     }
 
 }
