@@ -12,10 +12,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,6 +29,10 @@ class SensorAlertControllerIT {
 
     @LocalServerPort
     private int port;
+
+    // No broker in tests: mock the RabbitAdmin so RabbitMQInitializer#init() is a no-op.
+    @MockitoBean
+    private RabbitAdmin rabbitAdmin;
 
     @Autowired
     private SensorAlertRepository sensorAlertRepository;

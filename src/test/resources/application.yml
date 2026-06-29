@@ -10,3 +10,9 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+  rabbitmq:
+    # Tests run without a broker: don't start listener containers (they would try to connect).
+    # The RabbitAdmin is mocked in the integration tests so initialize() is a no-op.
+    listener:
+      simple:
+        auto-startup: false

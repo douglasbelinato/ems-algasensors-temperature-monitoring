@@ -11,9 +11,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpMethod;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 import java.time.OffsetDateTime;
@@ -29,6 +31,10 @@ class SensorMonitoringControllerIT {
 
     @LocalServerPort
     private int port;
+
+    // No broker in tests: mock the RabbitAdmin so RabbitMQInitializer#init() is a no-op.
+    @MockitoBean
+    private RabbitAdmin rabbitAdmin;
 
     @Autowired
     private SensorMonitoringRepository sensorMonitoringRepository;
@@ -137,6 +143,22 @@ class SensorMonitoringControllerIT {
                     .expectStatus().isOk()
                     .expectBody()
                     .jsonPath("$.enabled").isEqualTo(true);
+        }
+
+        @Test
+        @DisplayName("should still return 204 and keep it disabled when disabling an already disabled monitoring")
+        void shouldHandleDisableWhenAlreadyDisabled() {
+            // Intentional design: disable() sleeps 10s when the monitoring is already off
+            // (see CLAUDE.md). This test documents that the request still succeeds.
+            SensorMonitoring monitoring = persistMonitoring(TSID.fast(), false, null, null);
+
+            client.delete().uri(ENABLE_PATH, idOf(monitoring))
+                    .exchange()
+                    .expectStatus().isNoContent()
+                    .expectBody().isEmpty();
+
+            assertEquals(Boolean.FALSE, sensorMonitoringRepository.findById(monitoring.getId())
+                    .orElseThrow().getEnabled());
         }
     }
 

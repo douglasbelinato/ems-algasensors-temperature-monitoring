@@ -7,6 +7,8 @@ monitoramento de cada sensor, o histórico de leituras (temperature logs) e os a
 
 - Java 25 (toolchain Gradle) · Spring Boot 4.1.0 · Gradle (use o wrapper `./gradlew`)
 - Spring Web (MVC) · Spring Data JPA · H2 (arquivo em `~/algasensors-temperature-monitoring-db`)
+- **Spring AMQP / RabbitMQ** (`spring-boot-starter-amqp`) — consome as leituras publicadas pelo
+  `temperature-processing`
 - Lombok · hypersistence-tsid (IDs no formato TSID)
 - **Jackson 3** (vem com o Spring Boot 4 — ver Convenções)
 
@@ -23,7 +25,8 @@ H2 console: `http://localhost:8082/h2-console` (URL/credenciais em `src/main/res
 ## Arquitetura
 
 - Porta **8082**. Pacote base: `com.algaworks.algasensors.temperature.monitoring`.
-- Camadas: `api` (controller/model/config) · `domain` (model/repository).
+- Camadas: `api` (controller/model/config) · `domain` (model/repository/**service**) ·
+  `infrastructure/rabbitmq` (consumo de mensagens).
 - Controllers (todos sob `/api/sensors/{sensorId}`):
   - `SensorMonitoringController` (`/monitoring`): `GET` detalhe, `PUT|DELETE /enable`
     liga/desliga o monitoramento.
@@ -31,6 +34,25 @@ H2 console: `http://localhost:8082/h2-console` (URL/credenciais em `src/main/res
   - `TemperatureLogController` (`/temperatures`): `GET` do histórico de leituras.
 - **Consumidor a montante**: o `device-management` (porta 8080) chama os endpoints de
   `/monitoring` deste serviço para refletir o enable/disable dos sensores.
+
+## Mensageria (RabbitMQ) — lado consumidor
+
+- Config em `infrastructure/rabbitmq`:
+  - `RabbitMQConfig` declara duas filas ligadas (binding) ao fanout exchange do
+    `temperature-processing` (`temperature-processing.temperature-received.v1.e`):
+    - `QUEUE_PROCESS_TEMPERATURE` (`...process-temperature.v1.q`) — com **DLQ**
+      (`...process-temperature.v1.dlq`) via `x-dead-letter-exchange`/`-routing-key`.
+    - `QUEUE_ALERTING` (`temperature-monitoring.alerting.v1.q`).
+  - `RabbitMQInitializer` chama `rabbitAdmin.initialize()` num `@PostConstruct` (**força conexão
+    com o broker no startup**).
+- `RabbitMQListener` (`@RabbitListener`, `concurrency = "2-3"`) recebe o payload desserializado
+  como `TemperatureLogData` e delega aos services:
+  - fila de processamento → `TemperatureMonitoringService#processTemperatureReading`
+  - fila de alerta → `SensorAlertService#handleAlert` (e dorme 5s — comportamento do exercício).
+- Domain services (regra de negócio, cobertos por testes unitários Mockito):
+  - `TemperatureMonitoringService`: ignora se não há monitoramento ou está desabilitado; se
+    habilitado, atualiza `lastTemperature`/`updatedAt` e persiste um `TemperatureLog`.
+  - `SensorAlertService`: read-only (só loga) — compara o valor com `max`/`min` configurados.
 
 ## Convenções
 
@@ -52,6 +74,15 @@ H2 console: `http://localhost:8082/h2-console` (URL/credenciais em `src/main/res
   `http://localhost:{port}`. Cada teste limpa o repositório no `@BeforeEach`.
 - `src/test/resources/application.yml` sobrescreve o datasource para **H2 em memória**
   (`create-drop`), isolando os testes do banco em arquivo.
+- **Isolamento do RabbitMQ (sem broker nos testes)** — dois ajustes em conjunto:
+  - `application.yml` de teste define `spring.rabbitmq.listener.simple.auto-startup: false`,
+    para os containers do `@RabbitListener` **não** subirem nem tentarem conectar (senão eles
+    consomem mensagens reais do broker durante os testes).
+  - cada `@SpringBootTest` declara `@MockitoBean RabbitAdmin`, tornando
+    `RabbitMQInitializer#init()` um no-op (não tenta declarar topologia/conectar no startup).
+- **Services de domínio** são testados com Mockito puro (`@ExtendWith(MockitoExtension.class)`,
+  sem Spring): `TemperatureMonitoringServiceTest` e `SensorAlertServiceTest` cobrem todos os
+  ramos (sensor inexistente/desabilitado/habilitado; limiares max/min/dentro da faixa/nulos).
 
 ## Pegadinhas
 
